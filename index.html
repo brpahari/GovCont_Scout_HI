@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GovCon Scout: Hawaii Elevators</title>
+    <title>GovCon Scout: National Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -12,8 +12,8 @@
     <div class="max-w-6xl mx-auto">
         <div class="flex flex-col md:flex-row justify-between items-end mb-8 border-b pb-4">
             <div>
-                <h1 class="text-3xl font-extrabold text-blue-900 tracking-tight">🌺 Hawaii GovCon Scout</h1>
-                <p class="text-gray-500 mt-1">Vertical Transport & Conveyance (NAICS 238290)</p>
+                <h1 class="text-3xl font-extrabold text-blue-900 tracking-tight">🇺🇸 National GovCon Scout</h1>
+                <p class="text-gray-500 mt-1">Construction, Facilities & Electrical (Expanded Scope)</p>
             </div>
             <div class="text-xs text-gray-400 mt-2 md:mt-0 text-right">
                 <div id="last-updated">Updating...</div>
@@ -24,21 +24,21 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
                 <div>
-                    <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-4">🏆 Top Incumbents (HI)</h2>
+                    <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-4">🏆 Top Incumbents (National)</h2>
                     <div class="h-48"><canvas id="competitorChart"></canvas></div>
                 </div>
                 <p class="text-[10px] text-gray-400 mt-4 text-center">
-                    Source: USAspending award data for Hawaii place of performance (NAICS 238290)
+                    Source: USAspending award data (NAICS 238290, 236220, 238210, 561210)
                 </p>
             </div>
 
             <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
                 <div>
-                    <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-4">🏛️ Top Spending Agencies (HI)</h2>
+                    <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-4">🏛️ Top Spending Agencies</h2>
                     <div class="h-48"><canvas id="agencyChart"></canvas></div>
                 </div>
                 <p class="text-[10px] text-gray-400 mt-4 text-center">
-                    Source: USAspending award data for Hawaii place of performance (NAICS 238290)
+                    Source: USAspending award data (NAICS 238290, 236220, 238210, 561210)
                 </p>
             </div>
         </div>
@@ -51,7 +51,7 @@
                     </h2>
                     <p class="text-blue-200 text-xs mt-1">Opportunities from SAM.gov. Verify on official site.</p>
                 </div>
-                <input type="text" id="searchInput" placeholder="Filter by keyword (e.g. 'Modernization')..." 
+                <input type="text" id="searchInput" placeholder="Filter by keyword (e.g. 'Roof')..." 
                        class="px-4 py-2 rounded-lg text-sm w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-blue-400">
             </div>
 
@@ -83,12 +83,18 @@
         
         // 1. Intelligence Charts
         fetch('intelligence_top.json')
-            .then(r => r.json())
+            .then(r => {
+                // Check if file exists
+                if (!r.ok) throw new Error("Missing Data File");
+                return r.json();
+            })
             .then(d => {
                 document.getElementById('last-updated').innerText = `Updated: ${new Date(d.meta.generated_utc).toLocaleDateString()}`;
                 
                 const createChart = (id, label, dataObj) => {
-                    new Chart(document.getElementById(id), {
+                    const ctx = document.getElementById(id);
+                    if (!ctx) return;
+                    new Chart(ctx, {
                         type: 'bar',
                         data: {
                             labels: dataObj.map(x => x.name),
@@ -110,11 +116,17 @@
                 createChart('competitorChart', 'Obligated ($)', d.top_competitors);
                 createChart('agencyChart', 'Obligated ($)', d.top_agencies);
             })
-            .catch(err => console.log("Waiting for intelligence data..."));
+            .catch(err => {
+                document.getElementById('last-updated').innerText = "Status: Data Pending";
+                console.log("Intel Chart Error: " + err);
+            });
 
         // 2. Opportunities List
         fetch('opportunities.json')
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error(`Data File Not Found (${r.status})`);
+                return r.json();
+            })
             .then(data => {
                 const container = document.getElementById('ops-container');
                 const searchInput = document.getElementById('searchInput');
@@ -122,27 +134,27 @@
                 const render = (items) => {
                     container.innerHTML = '';
                     
-                    // Filter out expired items before rendering
-                    const validItems = items.filter(op => {
-                         const days = getDaysLeft(op.responseDeadline);
-                         // Keep if days is null (no deadline) or days >= 0 (future/today)
-                         return days === null || days >= 0;
-                    });
+                    // DEBUG MODE: Showing ALL items (Expired included) to prove connection
+                    const validItems = items; 
 
                     if(validItems.length === 0) {
                         container.innerHTML = `
                             <div class="p-10 text-center text-gray-500">
-                                <p class="text-lg font-semibold">No active bids found today.</p>
-                                <p class="text-sm mt-1">Check back tomorrow for new solicitations in this niche.</p>
+                                <p class="text-lg font-semibold">Scan Complete: 0 Results.</p>
+                                <p class="text-sm mt-1">The National Scan ran successfully but found no matches.</p>
                             </div>`;
                         return;
                     }
                     
-                    const validItems = items;
+                    validItems.forEach(op => {
+                        const days = getDaysLeft(op.responseDeadline);
+                        let badgeClass = 'bg-gray-100 text-gray-600';
+                        let badgeText = 'Open';
 
                         if(days !== null) {
                             badgeText = `${days} Days Left`;
-                            if(days < 5) badgeClass = 'bg-red-100 text-red-700 font-bold';
+                            if(days < 0) badgeClass = 'bg-gray-200 text-gray-500 line-through'; // Expired Style
+                            else if(days < 5) badgeClass = 'bg-red-100 text-red-700 font-bold';
                             else if(days < 14) badgeClass = 'bg-yellow-100 text-yellow-700';
                             else badgeClass = 'bg-green-100 text-green-700';
                         }
@@ -153,7 +165,7 @@
                         const agencyName = op.agency && op.agency !== "Unknown Agency" ? op.agency : "Federal Agency";
 
                         container.innerHTML += `
-                            <div class="p-6 hover:bg-blue-50 transition block group">
+                            <div class="p-6 hover:bg-blue-50 transition block group border-b border-gray-100">
                                 <div class="flex justify-between items-start mb-2">
                                     <div class="flex-1">
                                         <a href="${op.link}" target="_blank" class="text-lg font-bold text-blue-700 hover:underline leading-tight flex items-center">
@@ -186,7 +198,12 @@
                 });
             })
             .catch(err => {
-                document.getElementById('ops-container').innerHTML = '<div class="p-6 text-red-500">Error loading opportunities. Please refresh.</div>';
+                // THIS SHOWS YOU THE ERROR ON SCREEN INSTEAD OF "LOADING..."
+                document.getElementById('ops-container').innerHTML = `
+                    <div class="p-6 bg-red-50 text-red-700 rounded border border-red-200">
+                        <strong>System Error:</strong> ${err.message}<br>
+                        <span class="text-sm">The data file is missing. Check your GitHub Actions logs.</span>
+                    </div>`;
             });
     </script>
 </body>
