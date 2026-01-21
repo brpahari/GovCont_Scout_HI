@@ -75,99 +75,122 @@
         function getDaysLeft(dateStr) {
             if(!dateStr) return null;
             const diff = new Date(dateStr) - new Date();
+            // Return number of days (rounded up so 0.1 days = 1 day left)
             return Math.ceil(diff / (1000 * 60 * 60 * 24));
         }
 
         // --- LOAD DATA ---
         
         // 1. Intelligence Charts
-        fetch('intelligence_top.json').then(r => r.json()).then(d => {
-            document.getElementById('last-updated').innerText = `Updated: ${new Date(d.meta.generated_utc).toLocaleDateString()}`;
-            
-            const createChart = (id, label, dataObj) => {
-                new Chart(document.getElementById(id), {
-                    type: 'bar',
-                    data: {
-                        labels: dataObj.map(x => x.name),
-                        datasets: [{
-                            label: label,
-                            data: dataObj.map(x => x.value),
-                            backgroundColor: '#3b82f6',
-                            borderRadius: 4
-                        }]
-                    },
-                    options: { 
-                        responsive: true, maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: { x: { display: false } } 
-                    }
-                });
-            };
+        fetch('intelligence_top.json')
+            .then(r => r.json())
+            .then(d => {
+                document.getElementById('last-updated').innerText = `Updated: ${new Date(d.meta.generated_utc).toLocaleDateString()}`;
+                
+                const createChart = (id, label, dataObj) => {
+                    new Chart(document.getElementById(id), {
+                        type: 'bar',
+                        data: {
+                            labels: dataObj.map(x => x.name),
+                            datasets: [{
+                                label: label,
+                                data: dataObj.map(x => x.value),
+                                backgroundColor: '#3b82f6',
+                                borderRadius: 4
+                            }]
+                        },
+                        options: { 
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: { x: { display: false } } 
+                        }
+                    });
+                };
 
-            createChart('competitorChart', 'Obligated ($)', d.top_competitors);
-            createChart('agencyChart', 'Obligated ($)', d.top_agencies);
-        });
+                createChart('competitorChart', 'Obligated ($)', d.top_competitors);
+                createChart('agencyChart', 'Obligated ($)', d.top_agencies);
+            })
+            .catch(err => console.log("Waiting for intelligence data..."));
 
         // 2. Opportunities List
-        fetch('opportunities.json').then(r => r.json()).then(data => {
-            const container = document.getElementById('ops-container');
-            const searchInput = document.getElementById('searchInput');
-            
-            const render = (items) => {
-                container.innerHTML = '';
-                if(items.length === 0) {
-                    container.innerHTML = '<div class="p-6 text-gray-500">No matching opportunities found.</div>';
-                    return;
-                }
+        fetch('opportunities.json')
+            .then(r => r.json())
+            .then(data => {
+                const container = document.getElementById('ops-container');
+                const searchInput = document.getElementById('searchInput');
                 
-                items.forEach(op => {
-                    const days = getDaysLeft(op.responseDeadline);
-                    let badgeClass = 'bg-gray-100 text-gray-600';
-                    let badgeText = 'No Date';
+                const render = (items) => {
+                    container.innerHTML = '';
+                    
+                    // Filter out expired items before rendering
+                    const validItems = items.filter(op => {
+                         const days = getDaysLeft(op.responseDeadline);
+                         // Keep if days is null (no deadline) or days >= 0 (future/today)
+                         return days === null || days >= 0;
+                    });
 
-                    if(days !== null) {
-                        badgeText = `${days} Days Left`;
-                        if(days < 5) badgeClass = 'bg-red-100 text-red-700 font-bold';
-                        else if(days < 14) badgeClass = 'bg-yellow-100 text-yellow-700';
-                        else badgeClass = 'bg-green-100 text-green-700';
+                    if(validItems.length === 0) {
+                        container.innerHTML = `
+                            <div class="p-10 text-center text-gray-500">
+                                <p class="text-lg font-semibold">No active bids found today.</p>
+                                <p class="text-sm mt-1">Check back tomorrow for new solicitations in this niche.</p>
+                            </div>`;
+                        return;
                     }
+                    
+                    validItems.forEach(op => {
+                        const days = getDaysLeft(op.responseDeadline);
+                        let badgeClass = 'bg-gray-100 text-gray-600';
+                        let badgeText = 'Open';
 
-                    const setAsideTag = op.setAside ? 
-                        `<span class="ml-2 px-2 py-0.5 text-xs rounded bg-purple-100 text-purple-700 border border-purple-200">${op.setAside}</span>` : '';
+                        if(days !== null) {
+                            badgeText = `${days} Days Left`;
+                            if(days < 5) badgeClass = 'bg-red-100 text-red-700 font-bold';
+                            else if(days < 14) badgeClass = 'bg-yellow-100 text-yellow-700';
+                            else badgeClass = 'bg-green-100 text-green-700';
+                        }
 
-                    container.innerHTML += `
-                        <div class="p-6 hover:bg-blue-50 transition block group">
-                            <div class="flex justify-between items-start mb-2">
-                                <div class="flex-1">
-                                    <a href="${op.link}" target="_blank" class="text-lg font-bold text-blue-700 hover:underline leading-tight flex items-center">
-                                        ${op.title}
-                                        <svg class="w-3 h-3 ml-1 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-                                    </a>
-                                    ${setAsideTag}
+                        const setAsideTag = op.setAside ? 
+                            `<span class="ml-2 px-2 py-0.5 text-xs rounded bg-purple-100 text-purple-700 border border-purple-200">${op.setAside}</span>` : '';
+                        
+                        const agencyName = op.agency && op.agency !== "Unknown Agency" ? op.agency : "Federal Agency";
+
+                        container.innerHTML += `
+                            <div class="p-6 hover:bg-blue-50 transition block group">
+                                <div class="flex justify-between items-start mb-2">
+                                    <div class="flex-1">
+                                        <a href="${op.link}" target="_blank" class="text-lg font-bold text-blue-700 hover:underline leading-tight flex items-center">
+                                            ${op.title}
+                                            <svg class="w-3 h-3 ml-1 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                        </a>
+                                        ${setAsideTag}
+                                    </div>
+                                    <span class="px-3 py-1 rounded-full text-xs whitespace-nowrap ${badgeClass}">${badgeText}</span>
                                 </div>
-                                <span class="px-3 py-1 rounded-full text-xs whitespace-nowrap ${badgeClass}">${badgeText}</span>
+                                <div class="text-sm text-gray-600 flex flex-wrap gap-x-4">
+                                    <span>🏛️ ${agencyName}</span>
+                                    <span>📅 Due: ${op.responseDeadline ? new Date(op.responseDeadline).toLocaleDateString() : 'See Link'}</span>
+                                </div>
                             </div>
-                            <div class="text-sm text-gray-600 flex flex-wrap gap-x-4">
-                                <span>🏛️ ${op.agency}</span>
-                                <span>📅 Due: ${op.responseDeadline ? new Date(op.responseDeadline).toLocaleDateString() : 'N/A'}</span>
-                            </div>
-                        </div>
-                    `;
+                        `;
+                    });
+                };
+
+                render(data);
+
+                searchInput.addEventListener('keyup', (e) => {
+                    const term = e.target.value.toLowerCase();
+                    const filtered = data.filter(op => 
+                        op.title.toLowerCase().includes(term) || 
+                        op.description.toLowerCase().includes(term) ||
+                        op.agency.toLowerCase().includes(term)
+                    );
+                    render(filtered);
                 });
-            };
-
-            render(data);
-
-            searchInput.addEventListener('keyup', (e) => {
-                const term = e.target.value.toLowerCase();
-                const filtered = data.filter(op => 
-                    op.title.toLowerCase().includes(term) || 
-                    op.description.toLowerCase().includes(term) ||
-                    op.agency.toLowerCase().includes(term)
-                );
-                render(filtered);
+            })
+            .catch(err => {
+                document.getElementById('ops-container').innerHTML = '<div class="p-6 text-red-500">Error loading opportunities. Please refresh.</div>';
             });
-        });
     </script>
 </body>
 </html>
