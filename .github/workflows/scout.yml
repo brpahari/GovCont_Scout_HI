@@ -1,7 +1,7 @@
 name: GovCon Scout Daily Update
 on:
-  schedule:
-    - cron: '0 18 * * *' # ~8:00 AM HST
+#  schedule:
+#    - cron: '0 18 * * *' # ~8:00 AM HST
   workflow_dispatch:
   
 permissions:          
