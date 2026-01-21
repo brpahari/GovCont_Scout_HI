@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GovCon Scout: Hawaii Elevators</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans p-6 pb-20">
+
+    <div class="max-w-6xl mx-auto">
+        <div class="flex flex-col md:flex-row justify-between items-end mb-8 border-b pb-4">
+            <div>
+                <h1 class="text-3xl font-extrabold text-blue-900 tracking-tight">🌺 Hawaii GovCon Scout</h1>
+                <p class="text-gray-500 mt-1">Vertical Transport & Conveyance (NAICS 238290)</p>
+            </div>
+            <div class="text-xs text-gray-400 mt-2 md:mt-0 text-right">
+                <div id="last-updated">Updating...</div>
+                <div class="mt-1 italic">Data sourced from SAM.gov & USAspending.gov</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-4">🏆 Top Incumbents (HI)</h2>
+                    <div class="h-48"><canvas id="competitorChart"></canvas></div>
+                </div>
+                <p class="text-[10px] text-gray-400 mt-4 text-center">
+                    Source: USAspending award data for Hawaii place of performance (NAICS 238290)
+                </p>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-4">🏛️ Top Spending Agencies (HI)</h2>
+                    <div class="h-48"><canvas id="agencyChart"></canvas></div>
+                </div>
+                <p class="text-[10px] text-gray-400 mt-4 text-center">
+                    Source: USAspending award data for Hawaii place of performance (NAICS 238290)
+                </p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="p-6 bg-blue-900 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div>
+                    <h2 class="text-white font-bold text-xl flex items-center">
+                        <span class="w-2 h-2 rounded-full bg-green-400 mr-2 animate-pulse"></span> Active Bids
+                    </h2>
+                    <p class="text-blue-200 text-xs mt-1">Opportunities from SAM.gov. Verify on official site.</p>
+                </div>
+                <input type="text" id="searchInput" placeholder="Filter by keyword (e.g. 'Modernization')..." 
+                       class="px-4 py-2 rounded-lg text-sm w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+
+            <div id="ops-container" class="divide-y divide-gray-100">
+                <p class="p-6 text-gray-400 italic">Loading opportunities...</p>
+            </div>
+        </div>
+
+        <div class="mt-12 pt-6 border-t border-gray-200 text-center">
+            <div class="max-w-2xl mx-auto text-xs text-gray-500 leading-relaxed">
+                Data is pulled from public federal sources including SAM.gov and USAspending.gov and is provided for informational purposes only.
+                Verify all details on the official posting before making any business decisions.
+                No guarantee is made regarding accuracy, completeness, or timeliness.
+                This site does not provide legal advice.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- UTILS ---
+        function getDaysLeft(dateStr) {
+            if(!dateStr) return null;
+            const diff = new Date(dateStr) - new Date();
+            return Math.ceil(diff / (1000 * 60 * 60 * 24));
+        }
+
+        // --- LOAD DATA ---
+        
+        // 1. Intelligence Charts
+        fetch('intelligence_top.json').then(r => r.json()).then(d => {
+            document.getElementById('last-updated').innerText = `Updated: ${new Date(d.meta.generated_utc).toLocaleDateString()}`;
+            
+            const createChart = (id, label, dataObj) => {
+                new Chart(document.getElementById(id), {
+                    type: 'bar',
+                    data: {
+                        labels: dataObj.map(x => x.name),
+                        datasets: [{
+                            label: label,
+                            data: dataObj.map(x => x.value),
+                            backgroundColor: '#3b82f6',
+                            borderRadius: 4
+                        }]
+                    },
+                    options: { 
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { x: { display: false } } 
+                    }
+                });
+            };
+
+            createChart('competitorChart', 'Obligated ($)', d.top_competitors);
+            createChart('agencyChart', 'Obligated ($)', d.top_agencies);
+        });
+
+        // 2. Opportunities List
+        fetch('opportunities.json').then(r => r.json()).then(data => {
+            const container = document.getElementById('ops-container');
+            const searchInput = document.getElementById('searchInput');
+            
+            const render = (items) => {
+                container.innerHTML = '';
+                if(items.length === 0) {
+                    container.innerHTML = '<div class="p-6 text-gray-500">No matching opportunities found.</div>';
+                    return;
+                }
+                
+                items.forEach(op => {
+                    const days = getDaysLeft(op.responseDeadline);
+                    let badgeClass = 'bg-gray-100 text-gray-600';
+                    let badgeText = 'No Date';
+
+                    if(days !== null) {
+                        badgeText = `${days} Days Left`;
+                        if(days < 5) badgeClass = 'bg-red-100 text-red-700 font-bold';
+                        else if(days < 14) badgeClass = 'bg-yellow-100 text-yellow-700';
+                        else badgeClass = 'bg-green-100 text-green-700';
+                    }
+
+                    const setAsideTag = op.setAside ? 
+                        `<span class="ml-2 px-2 py-0.5 text-xs rounded bg-purple-100 text-purple-700 border border-purple-200">${op.setAside}</span>` : '';
+
+                    container.innerHTML += `
+                        <div class="p-6 hover:bg-blue-50 transition block group">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="flex-1">
+                                    <a href="${op.link}" target="_blank" class="text-lg font-bold text-blue-700 hover:underline leading-tight flex items-center">
+                                        ${op.title}
+                                        <svg class="w-3 h-3 ml-1 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                    </a>
+                                    ${setAsideTag}
+                                </div>
+                                <span class="px-3 py-1 rounded-full text-xs whitespace-nowrap ${badgeClass}">${badgeText}</span>
+                            </div>
+                            <div class="text-sm text-gray-600 flex flex-wrap gap-x-4">
+                                <span>🏛️ ${op.agency}</span>
+                                <span>📅 Due: ${op.responseDeadline ? new Date(op.responseDeadline).toLocaleDateString() : 'N/A'}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+            };
+
+            render(data);
+
+            searchInput.addEventListener('keyup', (e) => {
+                const term = e.target.value.toLowerCase();
+                const filtered = data.filter(op => 
+                    op.title.toLowerCase().includes(term) || 
+                    op.description.toLowerCase().includes(term) ||
+                    op.agency.toLowerCase().includes(term)
+                );
+                render(filtered);
+            });
+        });
+    </script>
+</body>
+</html>
