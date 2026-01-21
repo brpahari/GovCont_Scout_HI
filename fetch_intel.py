@@ -1,13 +1,12 @@
 import json
 import os
 import requests
-import sys
 from datetime import datetime, timedelta
 
 # --- CONFIGURATION ---
 NAICS_CODES = ["238290", "236220", "238210", "561210"]
-DAYS_BACK = 1825 # 5 Years
-LIMIT = 500 
+DAYS_BACK = 365 # 1 Year is enough for National data (too much volume otherwise)
+LIMIT = 300 
 
 OUT_TOP = "intelligence_top.json"
 URL = "https://api.usaspending.gov/api/v2/search/spending_by_award/"
@@ -21,8 +20,7 @@ def fetch_awards():
             "time_period": [{"start_date": start_date, "end_date": end_date}],
             "award_type_codes": ["A", "B", "C", "D"], 
             "naics_codes": {"require": NAICS_CODES},
-            # REMOVED "Country" to be safe, just use State
-            "place_of_performance_locations": [{"state": "HI"}] 
+            # REMOVED State Filter -> Now National
         },
         "fields": [
             "Award ID", "Recipient Name", "Total Obligation", 
@@ -36,13 +34,11 @@ def fetch_awards():
 
     try:
         r = requests.post(URL, json=payload, headers={"Content-Type": "application/json"}, timeout=60)
-        if r.status_code != 200:
-            print(f"⚠️ API Error: {r.status_code} - {r.text}")
-            return [], {}
+        r.raise_for_status()
         data = r.json()
         return data.get("results", []), {"start_date": start_date, "end_date": end_date}
     except Exception as e:
-        print(f"⚠️ Connection failed: {e}")
+        print(f"Error: {e}")
         return [], {}
 
 def aggregate_data(rows, key_field, top_n=5):
@@ -56,14 +52,14 @@ def aggregate_data(rows, key_field, top_n=5):
     return [{"name": k, "value": v} for k, v in sorted_items]
 
 def main():
-    print(f"Fetching Intelligence for Hawaii Construction...")
+    print(f"Fetching National Intelligence...")
     results, meta_dates = fetch_awards()
 
     top_competitors = aggregate_data(results, "Recipient Name", top_n=10)
     top_agencies = aggregate_data(results, "Awarding Agency", top_n=5)
 
     meta = {
-        "naics_code": "Multiple (Const/Fac)",
+        "naics_code": "Multiple (National)",
         "days_back": DAYS_BACK,
         "generated_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
         "count": len(results)
@@ -81,8 +77,4 @@ def main():
     print(f"✅ Success: Processed {len(results)} awards.")
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        print(f"❌ FATAL SCRIPT ERROR: {e}")
-        sys.exit(1)
+    main()
