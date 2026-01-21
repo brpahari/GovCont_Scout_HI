@@ -138,10 +138,7 @@
                         return;
                     }
                     
-                    validItems.forEach(op => {
-                        const days = getDaysLeft(op.responseDeadline);
-                        let badgeClass = 'bg-gray-100 text-gray-600';
-                        let badgeText = 'Open';
+                    const validItems = items;
 
                         if(days !== null) {
                             badgeText = `${days} Days Left`;
