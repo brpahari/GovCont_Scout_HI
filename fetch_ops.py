@@ -9,54 +9,51 @@ from datetime import datetime, timedelta
 API_KEY = os.environ.get("SAM_API_KEY") 
 BASE_URL = "https://api.sam.gov/opportunities/v2/search"
 
-# NATIONAL SCOPE (No Region Filter)
-NAICS_CODES = [
-    "238290", # Elevators
-    "236220", # Commercial Construction
-    "238210", # Electrical
-    "561210"  # Facilities Support
-]
+# SWITCH TO KEYWORDS (Catches way more than NAICS)
+KEYWORDS = ["Construction", "Elevator", "Electrical", "Repair"]
+
+# LOOK BACK 90 DAYS (Guarantees volume)
+DAYS_BACK = 90
 PTYPES = ["o", "k"] 
 
-def pull_sam_data(ptype, ncode):
+def pull_sam_data(ptype, keyword):
     if not API_KEY:
         print("❌ Error: SAM_API_KEY is missing.")
         return {}
 
     params = {
-        "limit": "50", 
-        "postedFrom": (datetime.now() - timedelta(days=30)).strftime('%m/%d/%Y'),
+        "limit": "100", 
+        "postedFrom": (datetime.now() - timedelta(days=DAYS_BACK)).strftime('%m/%d/%Y'),
         "postedTo": datetime.now().strftime('%m/%d/%Y'),
-        "ncode": ncode,     
+        "keywords": keyword,   # <--- SEARCHING BY TEXT NOW
         "ptype": ptype,
         "api_key": API_KEY
     }
     
     try:
-        # INCREASED TIMEOUT TO 120 SECONDS
         r = requests.get(BASE_URL, params=params, timeout=120)
         if r.status_code != 200:
-            print(f"⚠️ API Error {r.status_code} for {ncode}")
+            print(f"⚠️ API Error {r.status_code}: {r.text}")
             return {}
         return r.json()
     except Exception as e:
-        print(f"⚠️ Connection failed for {ncode}: {e}")
+        print(f"⚠️ Connection failed: {e}")
         return {}
 
 def main():
-    print(f"🇺🇸 Starting National Scan...")
+    print(f"🔎 Starting Keyword Scan: {KEYWORDS}...")
     
     opportunities = []
     seen_ids = set()
 
-    # Loop through NAICS
-    for n in NAICS_CODES:
+    for k in KEYWORDS:
         for p in PTYPES:
-            print(f"Scanning NAICS {n} (Type {p})...")
-            data = pull_sam_data(p, n)
+            print(f"Scanning for '{k}' (Type {p})...")
+            data = pull_sam_data(p, k)
             
-            # Process immediately to save memory
             ops_list = data.get("opportunitiesData", [])
+            print(f"   > Found {len(ops_list)} matches.")
+            
             for op in ops_list:
                 key = op.get("solicitationNumber") or op.get("noticeId") or op.get("title")
                 if not key or key in seen_ids:
@@ -73,11 +70,8 @@ def main():
                     "description": op.get("description", ""),
                     "setAside": op.get("typeOfSetAsideDescription", "").strip()
                 })
-            
-            # Sleep 1s to avoid hitting API limits
             time.sleep(1)
 
-    # SAFETY SAVE: Writes file even if 0 results found
     print(f"💾 Saving {len(opportunities)} opportunities to file...")
     with open('opportunities.json', 'w') as f:
         json.dump(opportunities, f)
@@ -89,7 +83,6 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         print(f"❌ CRITICAL FAILURE: {e}")
-        # Emergency Empty File Save to prevent 'Loading...' stuck state
         with open('opportunities.json', 'w') as f:
             json.dump([], f)
         sys.exit(1)
