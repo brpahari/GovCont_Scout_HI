@@ -1,25 +1,28 @@
 import requests
 import json
 import os
+import sys
 from datetime import datetime, timedelta
 
 # --- CONFIGURATION ---
 API_KEY = os.environ.get("SAM_API_KEY") 
 BASE_URL = "https://api.sam.gov/opportunities/v2/search"
 
-# EXPANDED NAICS LIST (The "Wide Net")
+# EXPANDED LIST
 NAICS_CODES = [
     "238290", # Elevators
     "236220", # Commercial Construction
     "238210", # Electrical
-    "561210"  # Facilities Support (Base Maintenance)
+    "561210"  # Facilities Support
 ]
 
 REGION = "HI"       
 PTYPES = ["o", "k"] 
 
 def pull_sam_data(ptype, ncode):
-    """Fetches data for a specific type and NAICS."""
+    if not API_KEY:
+        raise ValueError("CRITICAL ERROR: SAM_API_KEY is missing. Check GitHub Secrets.")
+
     params = {
         "limit": "100",
         "postedFrom": (datetime.now() - timedelta(days=60)).strftime('%m/%d/%Y'),
@@ -31,27 +34,31 @@ def pull_sam_data(ptype, ncode):
     }
     
     try:
-        r = requests.get(BASE_URL, params=params, timeout=60)
-        r.raise_for_status()
+        r = requests.get(BASE_URL, params=params, timeout=30)
+        # If API returns error, print it but don't crash
+        if r.status_code != 200:
+            print(f"⚠️ API Error for {ncode}/{ptype}: {r.status_code} - {r.text}")
+            return {}
         return r.json()
     except Exception as e:
-        print(f"Warning: ptype '{ptype}' NAICS '{ncode}' fetch failed: {e}")
+        print(f"⚠️ Connection failed for {ncode}/{ptype}: {e}")
         return {}
 
 def main():
-    print(f"Fetching SAM.gov opportunities for Hawaii (Expanded Niche)...")
+    print(f"Starting Scan for Hawaii (NAICS: {NAICS_CODES})...")
     
     all_raw_data = []
-    # Loop through ALL NAICS codes
     for n in NAICS_CODES:
         for p in PTYPES:
-            print(f"Scanning NAICS {n} - Type {p}...")
-            all_raw_data.append(pull_sam_data(p, n))
+            print(f"Scanning NAICS {n} (Type {p})...")
+            data = pull_sam_data(p, n)
+            all_raw_data.append(data)
 
     opportunities = []
     seen_ids = set()
 
     for data in all_raw_data:
+        # Safe access to data
         ops_list = data.get("opportunitiesData", [])
         if not ops_list: 
             continue
@@ -73,10 +80,15 @@ def main():
                 "setAside": op.get("typeOfSetAsideDescription", "").strip()
             })
 
+    # Always save the file, even if empty, to prevent "File Not Found" errors
     with open('opportunities.json', 'w') as f:
         json.dump(opportunities, f)
     
-    print(f"✅ Success: Saved {len(opportunities)} unique opportunities.")
+    print(f"✅ Success: Saved {len(opportunities)} opportunities.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"❌ FATAL SCRIPT ERROR: {e}")
+        sys.exit(1) # NOW we exit with error so you can see it
