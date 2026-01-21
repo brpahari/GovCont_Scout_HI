@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 
 # --- CONFIGURATION ---
 NAICS_CODE = os.environ.get("NAICS_CODE", "238290")
-DAYS_BACK = int(os.environ.get("DAYS_BACK", "365"))
+DAYS_BACK = int(os.environ.get("DAYS_BACK", "1825"))
 LIMIT = 200
 
 OUT_RAW = "intelligence.json"
