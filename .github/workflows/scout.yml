@@ -3,7 +3,10 @@ on:
   schedule:
     - cron: '0 18 * * *' # ~8:00 AM HST
   workflow_dispatch:
-
+  
+permissions:          
+  contents: write     
+  
 jobs:
   update-data:
     runs-on: ubuntu-latest
