@@ -1,0 +1,35 @@
+name: GovCon Scout Daily Update
+on:
+  schedule:
+    - cron: '0 18 * * *' # ~8:00 AM HST
+  workflow_dispatch:
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          
+      - name: Install Requests
+        run: pip install requests
+
+      - name: Fetch Live Bids (SAM)
+        env:
+          SAM_API_KEY: ${{ secrets.SAM_API_KEY }}
+        run: python fetch_ops.py
+        
+      - name: Fetch Market Intel (USAspending)
+        run: python fetch_intel.py
+
+      - name: Commit Data
+        run: |
+          git config --global user.name 'GovCon Bot'
+          git config --global user.email 'bot@noreply.github.com'
+          git add opportunities.json intelligence.json intelligence_top.json
+          git commit -m "Daily Scout Update" || exit 0
+          git push
